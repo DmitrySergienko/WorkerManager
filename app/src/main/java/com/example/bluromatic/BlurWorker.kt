@@ -2,9 +2,11 @@ package com.example.bluromatic
 
 import android.content.Context
 import android.graphics.BitmapFactory
+import android.net.Uri
 import android.util.Log
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
+import androidx.work.workDataOf
 import com.example.bluromatic.workers.blurBitmap
 import com.example.bluromatic.workers.makeStatusNotification
 import com.example.bluromatic.workers.writeBitmapToFile
@@ -20,33 +22,38 @@ class BlurWorker(appContext: Context, params: WorkerParameters) : CoroutineWorke
 ) {
     override suspend fun doWork(): Result {
 
+        val resourceUri = inputData.getString(KEY_IMAGE_URI)
+        val blurLevel = inputData.getInt(KEY_BLUR_LEVEL, 1)
+
         makeStatusNotification(
             applicationContext.resources.getString(R.string.blurring_image),
             applicationContext
         )
         return withContext(Dispatchers.IO) {
             try {
+                //here we do background operations (any save data, notifications etc.)
+               /* makeStatusNotification(
+                    applicationContext.resources.getString(R.string.app_name),
+                    applicationContext
+                )
+*/
                 //1. sleep a bit
                 delay(DELAY_TIME_MILLIS)
 
-                //2. take picture from drawable
-                val picture = BitmapFactory.decodeResource(
-                    applicationContext.resources,
-                    R.drawable.android_cupcake
-                )
-                //3. do some work with it (in out case blur the image)
-                val output = blurBitmap(picture, 1)
+                val resolver = applicationContext.contentResolver
 
-                //4. Write bitmap to a temp file
+                val picture = BitmapFactory.decodeStream(
+                    resolver.openInputStream(Uri.parse(resourceUri))
+                )
+                //2. do some work with it (in out case blur the image)
+                val output = blurBitmap(picture, blurLevel)
+
+                //3. Write bitmap to a temp file
                 val outputUri = writeBitmapToFile(applicationContext, output)
 
-                //5. display a notification message to the user
-                makeStatusNotification(
-                    "Output is $outputUri",
-                    applicationContext
-                )
+                val outputData = workDataOf(KEY_IMAGE_URI to outputUri.toString())
 
-                Result.success()
+                Result.success(outputData)
 
             } catch (throwable: Throwable) {
                 Log.e(
